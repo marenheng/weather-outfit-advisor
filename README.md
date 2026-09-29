@@ -1,113 +1,48 @@
-# AI-drevet værmelding for Norge
+# Weather Outfit Advisor
 
-Et agentisk AI-system som bruker Claude som orkestrator og sanntids-API-er som verktøy. Claude avgjør selv hvilke verktøy som trengs, i hvilken rekkefølge, og når svaret er klart.
+Et lite Python-program som henter sanntidsvær for et sted i Norge og gir råd om hva du bør ha på deg.
 
-## Hva er agentisk AI?
+## Hvordan det fungerer
 
-I motsetning til et klassisk script der flyten er fastkodet, fungerer Claude her som en autonom agent:
-
-```
-Bruker: "Hva bør jeg ha på meg i Bergen i morgen?"
-
-Claude:
-  1. → kaller get_coordinates("Bergen")
-  2. → kaller get_forecast(lat, lon, days=2)
-  3. → analyserer data og formulerer et konkret antrekksråd
-```
-
-Claude bestemmer selv hvilke verktøy den trenger basert på spørsmålet — ikke programmereren.
-
-## Arkitektur
-
-```
-┌─────────────────────────────────────────────┐
-│                  Claude (LLM)               │
-│  • Forstår intensjon                        │
-│  • Velger og sekvenserer verktøykall        │
-│  • Husker kontekst på tvers av spørsmål     │
-└────────────┬────────────────────────────────┘
-             │ tool_use / tool_result
-     ┌───────┴────────────────────────┐
-     │         Verktøylag             │
-     ├────────────────────────────────┤
-     │ get_coordinates  → Nominatim   │
-     │ get_current_weather → yr.no    │
-     │ get_forecast        → yr.no    │
-     └────────────────────────────────┘
-```
-
-### Agentisk løkke (`agent_loop`)
-
-```python
-while True:
-    response = client.messages.create(model=MODEL, tools=TOOLS, messages=messages)
-    messages.append({"role": "assistant", "content": response.content})
-
-    if response.stop_reason == "end_turn":
-        return response          # Claude er ferdig
-
-    # Utfør verktøykallene Claude ba om
-    tool_results = [execute_tool(b.name, b.input) for b in response.content if b.type == "tool_use"]
-    messages.append({"role": "user", "content": tool_results})
-    # → neste iterasjon: Claude får resultatene og fortsetter
-```
-
-Løkken kjører til `stop_reason == "end_turn"`. Mellom iterasjonene er det Claude — ikke koden — som bestemmer hva som skjer.
-
-## Funksjoner
-
-- **Nåværende vær** — temperatur, vind, luftfuktighet, nedbør neste time
-- **Flerdagers varsel** — opptil 7 dager, representativt klokkeslett per dag (nærmest kl. 12)
-- **Antrekksråd** — konkrete råd tilpasset værforholdene
-- **Samtalehukommelse** — stilte spørsmål uten at Claude trenger å hente data på nytt
+1. Du skriver inn en by.
+2. Programmet slår opp koordinatene via **Nominatim (OpenStreetMap)**.
+3. Det henter været akkurat nå fra **MET Norway / yr.no** (`locationforecast/2.0`): temperatur, vind, nedbør neste time og værsymbol.
+4. Ut fra disse verdiene gir det konkrete antrekksråd for kulde, regn, snø, sludd, vind og tåke.
 
 ## Eksempel
 
 ```
-Du: Hvordan er været i Stavanger nå?
+Enter your city: Bergen
 
-  [get_coordinates]
-  [get_current_weather]
+🌡️ Temperature: 9.4°C
+💨 Wind speed: 6.1 m/s
+🌧️ Precipitation: 0.8 mm
+🌤️ Condition: lightrain
 
-Assistent: Det er 12°C i Stavanger akkurat nå med lett bris (4 m/s).
-Himmelen er overskyet, og det er ikke ventet nedbør den neste timen.
-Ha gjerne med en lett jakke.
-
-Du: Hva med de neste dagene?
-
-  [get_forecast]
-
-Assistent: Her er varselet for Stavanger de neste tre dagene:
-• Torsdag: 11°C, lett regn, vind 5 m/s — regnjakke anbefales
-• Fredag: 14°C, delvis skyet — lett jakke holder
-• Lørdag: 16°C, pent vær — fin dag for uteaktivitet!
+👗 Outfit advice:
+🧣 Pretty cold – a warm jacket and scarf are a good idea.
+☔ Rain expected – bring an umbrella or raincoat.
 ```
 
-## Komme i gang
+## Kom i gang
 
-**Krav:** Python 3.10+, en [Anthropic API-nøkkel](https://console.anthropic.com/)
+Krever Python 3.8 eller nyere. Programmet bruker bare standardbiblioteket, så du trenger ikke installere noe.
 
 ```bash
-pip install anthropic
-export ANTHROPIC_API_KEY=sk-ant-...   # Windows: $env:ANTHROPIC_API_KEY = "sk-ant-..."
-python weather_agent.py
+python chatbot.py
 ```
 
-## Teknisk stack
+## Teknisk
 
-| Komponent | Teknologi |
+| Del | Løsning |
 |---|---|
-| LLM / Agent | Claude Opus 4.7 (Anthropic) |
-| Geocoding | Nominatim / OpenStreetMap |
-| Værvarsling | MET Norway / yr.no (`locationforecast/2.0`) |
-| Avhengigheter | `anthropic` (ingen andre) |
+| Språk | Python (kun standardbiblioteket: `urllib`, `json`) |
+| Stedsoppslag | Nominatim / OpenStreetMap |
+| Værdata | MET Norway / yr.no, `locationforecast/2.0/compact` |
+| Antrekksråd | Regelbasert logikk på temperatur, vind, nedbør og værsymbol |
 
-## Sammenligning: script vs. agent
+## Videre ideer
 
-| | `weather.py` (klassisk) | `weather_agent.py` (agentisk) |
-|---|---|---|
-| Flyt | Fastkodet if/elif | Claude bestemmer |
-| Verktøyvalg | Hardkodet | Dynamisk |
-| Samtale | Enkeltspørsmål | Flertrinns dialog |
-| Utvidbarhet | Ny kode per funksjon | Nytt verktøy i `TOOLS`-lista |
-| Språkforståelse | Ingen | Full NLU via LLM |
+- Varsel for flere dager fram i tid
+- Råd tilpasset aktivitet, for eksempel løping eller sykling
+- Enkelt webgrensesnitt
